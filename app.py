@@ -1,18 +1,41 @@
 import streamlit as st
 import pandas as pd
-from google.oauth2 import service_account
+from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
+from googleapiclient.http import MediaIoBaseDownload
+import io
+from PIL import Image
 
 st.set_page_config(page_title="Seguridad San José", page_icon="🥑", layout="centered")
 
-# --- CONEXIÓN A GOOGLE DRIVE ---
+# --- CONEXIÓN A DRIVE ---
 @st.cache_resource
 def conectar_drive():
-    credenciales = service_account.Credentials.from_service_account_info(
+    credenciales = Credentials.from_service_account_info(
         st.secrets["gcp_service_account"],
         scopes=["https://www.googleapis.com/auth/drive.readonly"]
     )
     return build('drive', 'v3', credentials=credenciales)
+
+def obtener_ultimas_fotos(servicio, cantidad=5):
+    # Busca imágenes en las carpetas compartidas con la cuenta de servicio
+    resultados = servicio.files().list(
+        q="mimeType='image/jpeg'",
+        orderBy="createdTime desc",
+        pageSize=cantidad,
+        fields="files(id, name, createdTime)"
+    ).execute()
+    return resultados.get('files', [])
+
+def descargar_imagen(servicio, file_id):
+    request = servicio.files().get_media(fileId=file_id)
+    fh = io.BytesIO()
+    downloader = MediaIoBaseDownload(fh, request)
+    done = False
+    while not done:
+        status, done = downloader.next_chunk()
+    fh.seek(0)
+    return Image.open(fh)
 
 # --- SISTEMA DE LOGIN ---
 def check_password():
@@ -25,7 +48,6 @@ def check_password():
             st.session_state["autenticado"] = False
 
     if "autenticado" not in st.session_state:
-        st.markdown("<h2 style='text-align: center;'>🔒 Acceso Restringido</h2>", unsafe_allow_html=True)
         st.text_input("Usuario", key="usuario")
         st.text_input("Contraseña", type="password", key="clave")
         st.button("Ingresar", on_click=password_entered, use_container_width=True)
@@ -35,18 +57,36 @@ def check_password():
         return False
     return True
 
-# --- PANEL DE CONTROL ---
+# --- PANEL DE CONTROL PRINCIPAL ---
+st.markdown("<h1 style='text-align: center;'>🥑 Seguridad Perimetral San José</h1>", unsafe_allow_html=True)
+
+if not st.session_state.get("autenticado", False):
+    st.markdown("<h3 style='text-align: center;'>🔒 Acceso Restringido</h3>", unsafe_allow_html=True)
+
 if check_password():
-    st.title("🥑 Panel de Seguridad - San José")
-    st.success("Conexión segura establecida.")
+    st.success("Conexión segura establecida con el nodo Edge.")
     
     try:
-        servicio_drive = conectar_drive()
-        st.info("✅ Autenticación con Google Drive exitosa. El robot 'lector-nodo' está listo.")
+        servicio = conectar_drive()
+        st.info("✅ Enlace API con repositorio documental activo.")
         
-        # Aquí programaremos la lectura de tu carpeta "detecciones"
-        st.markdown("### ID de Carpeta Requerido")
-        st.write("Para extraer las fotos, necesitamos el ID de la carpeta raíz.")
+        st.subheader("📷 Últimas Detecciones Vehiculares y Peatonales")
         
+        with st.spinner('Extrayendo evidencias criptográficas...'):
+            archivos = obtener_ultimas_fotos(servicio, 5)
+            
+        if not archivos:
+            st.warning("El nodo no ha registrado fotografías recientes.")
+        else:
+            for archivo in archivos:
+                # Formatear la fecha de la alerta
+                fecha_limpia = archivo['createdTime'].replace("T", " ").split(".")[0]
+                st.markdown(f"**Identificador:** `{archivo['name']}` | **Marca de tiempo:** `{fecha_limpia}`")
+                
+                # Descargar y mostrar la imagen
+                img = descargar_imagen(servicio, archivo['id'])
+                st.image(img, use_column_width=True)
+                st.divider()
+
     except Exception as e:
-        st.error(f"Error al conectar con Drive: {e}")
+        st.error(f"Fallo en la comunicación con el Backend: {e}")
