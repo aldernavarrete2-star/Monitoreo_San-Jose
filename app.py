@@ -20,9 +20,11 @@ def conectar_drive():
     )
     return build('drive', 'v3', credentials=credenciales)
 
-def listar_archivos(servicio, parent_id):
+# Se agrega Caché por 5 minutos (300 seg) para no saturar la red de Google
+@st.cache_data(ttl=300, show_spinner=False)
+def listar_archivos(_servicio, parent_id):
     """Busca archivos o carpetas dentro de un ID padre específico."""
-    resultados = servicio.files().list(
+    resultados = _servicio.files().list(
         q=f"'{parent_id}' in parents and trashed=false",
         orderBy="name desc",
         fields="files(id, name, mimeType)"
@@ -83,7 +85,7 @@ if check_password():
             if dias:
                 dia_seleccionado = st.selectbox("📆 Seleccione el Día:", dias, format_func=lambda x: x['name'])
                 
-                # 3. Seleccionar Categoría (Vehículos / Personas)
+                # 3. Seleccionar Categoría
                 categorias = listar_archivos(servicio, dia_seleccionado['id'])
                 if categorias:
                     cat_seleccionada = st.selectbox("🔍 Seleccione la Categoría:", categorias, format_func=lambda x: x['name'])
@@ -97,9 +99,11 @@ if check_password():
                             if "image" in foto['mimeType']:
                                 st.markdown(f"**Archivo:** `{foto['name']}`")
                                 with st.spinner('Descargando imagen encriptada...'):
-                                    img = descargar_imagen(servicio, foto['id'])
-                                    # ¡AQUÍ ESTÁ LA CORRECCIÓN DEL ERROR!
-                                    st.image(img, use_container_width=True)
+                                    try:
+                                        img = descargar_imagen(servicio, foto['id'])
+                                        st.image(img, use_container_width=True)
+                                    except Exception as e:
+                                        st.error(f"Error al cargar la imagen {foto['name']}: {e}")
                                 st.divider()
                     else:
                         st.warning("No hay detecciones registradas en esta carpeta.")
@@ -108,7 +112,7 @@ if check_password():
             else:
                 st.write("No hay días registrados en este mes.")
         else:
-            st.warning("El robot no encuentra la carpeta principal. Asegúrese de haber compartido la carpeta 'detecciones' con el correo de la cuenta de servicio.")
+            st.warning("El robot no encuentra la carpeta principal. Asegúrese de haber compartido la carpeta 'detecciones'.")
 
     except Exception as e:
         st.error(f"Fallo en la comunicación con el Backend: {e}")
