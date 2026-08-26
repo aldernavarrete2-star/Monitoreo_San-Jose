@@ -20,19 +20,21 @@ def conectar_drive():
     )
     return build('drive', 'v3', credentials=credenciales)
 
-# Se agrega Caché por 5 minutos (300 seg) para no saturar la red de Google
-@st.cache_data(ttl=300, show_spinner=False)
-def listar_archivos(_servicio, parent_id):
-    """Busca archivos o carpetas dentro de un ID padre específico."""
-    resultados = _servicio.files().list(
-        q=f"'{parent_id}' in parents and trashed=false",
-        orderBy="name desc",
-        fields="files(id, name, mimeType)"
-    ).execute()
-    return resultados.get('files', [])
+def listar_archivos(servicio, parent_id):
+    """Busca archivos o carpetas dentro de un ID padre de manera segura."""
+    try:
+        resultados = servicio.files().list(
+            q=f"'{parent_id}' in parents and trashed=false",
+            orderBy="name desc",
+            fields="files(id, name, mimeType)"
+        ).execute()
+        return resultados.get('files', [])
+    except Exception as e:
+        st.error(f"Error al consultar Google Drive: {e}")
+        return []
 
 def descargar_imagen(servicio, file_id):
-    """Descarga los bytes de la imagen y los convierte para mostrarlos."""
+    """Descarga los bytes de la imagen de forma directa."""
     request = servicio.files().get_media(fileId=file_id)
     fh = io.BytesIO()
     downloader = MediaIoBaseDownload(fh, request)
