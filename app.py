@@ -8,6 +8,9 @@ from PIL import Image
 
 st.set_page_config(page_title="Seguridad San José", page_icon="🥑", layout="centered")
 
+# ID de tu carpeta principal "detecciones"
+CARPETA_RAIZ_ID = "1HRA_2wC9sEUHonaW_uCRe9R0YxACPZ6j"
+
 # --- CONEXIÓN A DRIVE ---
 @st.cache_resource
 def conectar_drive():
@@ -17,17 +20,17 @@ def conectar_drive():
     )
     return build('drive', 'v3', credentials=credenciales)
 
-def obtener_ultimas_fotos(servicio, cantidad=5):
-    # Busca imágenes en las carpetas compartidas con la cuenta de servicio
+def listar_archivos(servicio, parent_id):
+    """Busca archivos o carpetas dentro de un ID padre específico."""
     resultados = servicio.files().list(
-        q="mimeType='image/jpeg'",
-        orderBy="createdTime desc",
-        pageSize=cantidad,
-        fields="files(id, name, createdTime)"
+        q=f"'{parent_id}' in parents and trashed=false",
+        orderBy="name desc",
+        fields="files(id, name, mimeType)"
     ).execute()
     return resultados.get('files', [])
 
 def descargar_imagen(servicio, file_id):
+    """Descarga los bytes de la imagen y los convierte para mostrarlos."""
     request = servicio.files().get_media(fileId=file_id)
     fh = io.BytesIO()
     downloader = MediaIoBaseDownload(fh, request)
@@ -48,9 +51,10 @@ def check_password():
             st.session_state["autenticado"] = False
 
     if "autenticado" not in st.session_state:
+        st.markdown("<h2 style='text-align: center;'>🔒 Acceso Restringido</h2>", unsafe_allow_html=True)
         st.text_input("Usuario", key="usuario")
         st.text_input("Contraseña", type="password", key="clave")
-        st.button("Ingresar", on_click=password_entered, use_container_width=True)
+        st.button("Ingresar al Sistema", on_click=password_entered, use_container_width=True)
         return False
     elif not st.session_state["autenticado"]:
         st.error("🚫 Credenciales incorrectas.")
@@ -60,33 +64,51 @@ def check_password():
 # --- PANEL DE CONTROL PRINCIPAL ---
 st.markdown("<h1 style='text-align: center;'>🥑 Seguridad Perimetral San José</h1>", unsafe_allow_html=True)
 
-if not st.session_state.get("autenticado", False):
-    st.markdown("<h3 style='text-align: center;'>🔒 Acceso Restringido</h3>", unsafe_allow_html=True)
-
 if check_password():
     st.success("Conexión segura establecida con el nodo Edge.")
     
     try:
         servicio = conectar_drive()
-        st.info("✅ Enlace API con repositorio documental activo.")
         
-        st.subheader("📷 Últimas Detecciones Vehiculares y Peatonales")
+        st.subheader("📁 Explorador de Evidencias Fotográficas")
+        st.write("Navegue por el árbol de directorios para visualizar las detecciones.")
         
-        with st.spinner('Extrayendo evidencias criptográficas...'):
-            archivos = obtener_ultimas_fotos(servicio, 5)
+        # 1. Seleccionar Mes
+        meses = listar_archivos(servicio, CARPETA_RAIZ_ID)
+        if meses:
+            mes_seleccionado = st.selectbox("📅 Seleccione el Mes:", meses, format_func=lambda x: x['name'])
             
-        if not archivos:
-            st.warning("El nodo no ha registrado fotografías recientes.")
-        else:
-            for archivo in archivos:
-                # Formatear la fecha de la alerta
-                fecha_limpia = archivo['createdTime'].replace("T", " ").split(".")[0]
-                st.markdown(f"**Identificador:** `{archivo['name']}` | **Marca de tiempo:** `{fecha_limpia}`")
+            # 2. Seleccionar Día
+            dias = listar_archivos(servicio, mes_seleccionado['id'])
+            if dias:
+                dia_seleccionado = st.selectbox("📆 Seleccione el Día:", dias, format_func=lambda x: x['name'])
                 
-                # Descargar y mostrar la imagen
-                img = descargar_imagen(servicio, archivo['id'])
-                st.image(img, use_column_width=True)
-                st.divider()
+                # 3. Seleccionar Categoría (Vehículos / Personas)
+                categorias = listar_archivos(servicio, dia_seleccionado['id'])
+                if categorias:
+                    cat_seleccionada = st.selectbox("🔍 Seleccione la Categoría:", categorias, format_func=lambda x: x['name'])
+                    
+                    # 4. Mostrar las fotografías
+                    fotos = listar_archivos(servicio, cat_seleccionada['id'])
+                    
+                    if fotos:
+                        st.info(f"📸 Se encontraron {len(fotos)} registros en esta carpeta.")
+                        for foto in fotos:
+                            if "image" in foto['mimeType']:
+                                st.markdown(f"**Archivo:** `{foto['name']}`")
+                                with st.spinner('Descargando imagen encriptada...'):
+                                    img = descargar_imagen(servicio, foto['id'])
+                                    # ¡AQUÍ ESTÁ LA CORRECCIÓN DEL ERROR!
+                                    st.image(img, use_container_width=True)
+                                st.divider()
+                    else:
+                        st.warning("No hay detecciones registradas en esta carpeta.")
+                else:
+                    st.write("No hay categorías creadas para este día.")
+            else:
+                st.write("No hay días registrados en este mes.")
+        else:
+            st.warning("El robot no encuentra la carpeta principal. Asegúrese de haber compartido la carpeta 'detecciones' con el correo de la cuenta de servicio.")
 
     except Exception as e:
         st.error(f"Fallo en la comunicación con el Backend: {e}")
