@@ -1,48 +1,55 @@
 import streamlit as st
 import pandas as pd
-from google.oauth2.service_account import Credentials
-from googleapiclient.discovery import build
-from googleapiclient.http import MediaIoBaseDownload
+import requests
 import io
 from PIL import Image
+from google.oauth2 import service_account
+import google.auth.transport.requests
 
 st.set_page_config(page_title="Seguridad San José", page_icon="🥑", layout="centered")
 
-# ID de tu carpeta principal "detecciones"
 CARPETA_RAIZ_ID = "1HRA_2wC9sEUHonaW_uCRe9R0YxACPZ6j"
 
-# --- CONEXIÓN A DRIVE ---
-@st.cache_resource
-def conectar_drive():
-    credenciales = Credentials.from_service_account_info(
+# --- AUTENTICACIÓN SEGURA POR TOKEN HTTP ---
+def obtener_token():
+    credenciales = service_account.Credentials.from_service_account_info(
         st.secrets["gcp_service_account"],
         scopes=["https://www.googleapis.com/auth/drive.readonly"]
     )
-    return build('drive', 'v3', credentials=credenciales)
+    auth_request = google.auth.transport.requests.Request()
+    credenciales.refresh(auth_request)
+    return credenciales.token
 
-def listar_archivos(servicio, parent_id):
-    """Busca archivos o carpetas dentro de un ID padre de manera segura."""
-    try:
-        resultados = servicio.files().list(
-            q=f"'{parent_id}' in parents and trashed=false",
-            orderBy="name desc",
-            fields="files(id, name, mimeType)"
-        ).execute()
-        return resultados.get('files', [])
-    except Exception as e:
-        st.error(f"Error al consultar Google Drive: {e}")
-        return []
+def consultar_drive(url, params=None):
+    """Realiza peticiones HTTP directas evitando el fallo de SSL sockets."""
+    token = obtener_token()
+    headers = {"Authorization": f"Bearer {token}"}
+    response = requests.get(url, headers=headers, params=params)
+    if response.status_code == 200:
+        return response.json()
+    else:
+        return None
 
-def descargar_imagen(servicio, file_id):
-    """Descarga los bytes de la imagen de forma directa."""
-    request = servicio.files().get_media(fileId=file_id)
-    fh = io.BytesIO()
-    downloader = MediaIoBaseDownload(fh, request)
-    done = False
-    while not done:
-        status, done = downloader.next_chunk()
-    fh.seek(0)
-    return Image.open(fh)
+def listar_archivos(parent_id):
+    url = "https://www.googleapis.com/drive/v3/files"
+    params = {
+        "q": f"'{parent_id}' in parents and trashed=false",
+        "orderBy": "name desc",
+        "fields": "files(id, name, mimeType)"
+    }
+    data = consultar_drive(url, params)
+    if data:
+        return data.get('files', [])
+    return []
+
+def descargar_imagen(file_id):
+    url = f"https://www.googleapis.com/drive/v3/files/{file_id}?alt=media"
+    token = obtener_token()
+    headers = {"Authorization": f"Bearer {token}"}
+    response = requests.get(url, headers=headers)
+    if response.status_code == 200:
+        return Image.open(io.BytesIO(response.content))
+    return None
 
 # --- SISTEMA DE LOGIN ---
 def check_password():
@@ -65,56 +72,54 @@ def check_password():
         return False
     return True
 
-# --- PANEL DE CONTROL PRINCIPAL ---
+# --- PANEL DE CONTROL ---
 st.markdown("<h1 style='text-align: center;'>🥑 Seguridad Perimetral San José</h1>", unsafe_allow_html=True)
 
 if check_password():
     st.success("Conexión segura establecida con el nodo Edge.")
     
     try:
-        servicio = conectar_drive()
-        
         st.subheader("📁 Explorador de Evidencias Fotográficas")
-        st.write("Navegue por el árbol de directorios para visualizar las detecciones.")
+        st.write("Navegación optimizada mediante API REST y tokens cifrados.")
         
         # 1. Seleccionar Mes
-        meses = listar_archivos(servicio, CARPETA_RAIZ_ID)
+        meses = listar_archivos(CARPETA_RAIZ_ID)
         if meses:
             mes_seleccionado = st.selectbox("📅 Seleccione el Mes:", meses, format_func=lambda x: x['name'])
             
             # 2. Seleccionar Día
-            dias = listar_archivos(servicio, mes_seleccionado['id'])
+            dias = listar_archivos(mes_seleccionado['id'])
             if dias:
                 dia_seleccionado = st.selectbox("📆 Seleccione el Día:", dias, format_func=lambda x: x['name'])
                 
                 # 3. Seleccionar Categoría
-                categorias = listar_archivos(servicio, dia_seleccionado['id'])
+                categorias = listar_archivos(dia_seleccionado['id'])
                 if categorias:
                     cat_seleccionada = st.selectbox("🔍 Seleccione la Categoría:", categorias, format_func=lambda x: x['name'])
                     
-                    # 4. Mostrar las fotografías
-                    fotos = listar_archivos(servicio, cat_seleccionada['id'])
+                    # 4. Mostrar fotos
+                    fotos = listar_archivos(cat_seleccionada['id'])
                     
                     if fotos:
                         st.info(f"📸 Se encontraron {len(fotos)} registros en esta carpeta.")
                         for foto in fotos:
                             if "image" in foto['mimeType']:
                                 st.markdown(f"**Archivo:** `{foto['name']}`")
-                                with st.spinner('Descargando imagen encriptada...'):
-                                    try:
-                                        img = descargar_imagen(servicio, foto['id'])
+                                with st.spinner('Descargando evidencia...'):
+                                    img = descargar_imagen(foto['id'])
+                                    if img:
                                         st.image(img, use_container_width=True)
-                                    except Exception as e:
-                                        st.error(f"Error al cargar la imagen {foto['name']}: {e}")
+                                    else:
+                                        st.error("No se pudo descargar la imagen.")
                                 st.divider()
                     else:
-                        st.warning("No hay detecciones registradas en esta carpeta.")
+                        st.warning("No hay detecciones en esta carpeta.")
                 else:
-                    st.write("No hay categorías creadas para este día.")
+                    st.write("No hay categorías para este día.")
             else:
                 st.write("No hay días registrados en este mes.")
         else:
-            st.warning("El robot no encuentra la carpeta principal. Asegúrese de haber compartido la carpeta 'detecciones'.")
+            st.warning("El robot no encuentra la carpeta principal. Verifique permisos de compartición en Drive.")
 
     except Exception as e:
-        st.error(f"Fallo en la comunicación con el Backend: {e}")
+        st.error(f"Error crítico en el sistema: {e}")
