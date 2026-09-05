@@ -1,0 +1,15 @@
+alder@raspberrypi:~ $ sudo nano /etc/systemd/system/monitoreo_sanjose.service
+alder@raspberrypi:~ $ sudo systemctl daemon-reload
+alder@raspberrypi:~ $ sudo systemctl enable monitoreo_sanjose.service
+Created symlink /etc/systemd/system/multi-user.target.wants/monitoreo_sanjose.service → /etc/systemd/system/monitoreo_sanjose.service.
+alder@raspberrypi:~ $ sudo systemctl start monitoreo_sanjose.service
+alder@raspberrypi:~ $ sudo nano /etc/systemd/system/monitoreo_sanjose.service
+alder@raspberrypi:~ $ sudo nano /etc/systemd/system/monitoreo_sanjose.service
+alder@raspberrypi:~ $ sudo systemctl daemon-reload
+alder@raspberrypi:~ $ sudo systemctl restart monitoreo_sanjose.service
+alder@raspberrypi:~ $ sudo nano /etc/systemd/system/monitoreo_sanjose.service
+alder@raspberrypi:~ $ sudo systemctl stop monitoreo_sanjose.service
+alder@raspberrypi:~ $ sudo systemctl start monitoreo_sanjose.service
+alder@raspberrypi:~ $ source entorno_tesis/bin/activate
+sudo systemctl stop monitoreo_sanjose.service
+sudo systemctl start monitoreo_sanjose.service

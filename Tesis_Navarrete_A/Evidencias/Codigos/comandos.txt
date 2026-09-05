@@ -1,0 +1,44 @@
+
+
+1. Preparación del Entorno de Ejecución
+Comando:
+source entorno_tesis/bin/activate
+
+Activa el entorno virtual de Python.
+
+
+2. Creación del Servicio de Arranque Automático (Systemd)
+Comando:
+sudo nano /etc/systemd/system/monitoreo_sanjose.service
+
+
+3. Aplicación de Cambios en el Sistema
+Comando:
+sudo systemctl daemon-reload
+
+
+4. Habilitación para Operación Autónoma (Sobrevivir a cortes de luz)
+Comando:
+sudo systemctl enable monitoreo_sanjose.service
+
+
+5. Gestión y Control en Tiempo Real
+Comandos:
+sudo systemctl start monitoreo_sanjose.service
+sudo systemctl stop monitoreo_sanjose.service
+sudo systemctl restart monitoreo_sanjose.service
+
+6.pruebas F
+Para ver si el servicio está activo o falló:
+sudo systemctl status monitoreo_sanjose.service
+Para ver los "prints" del código en tiempo real (Los logs):
+journalctl -u monitoreo_sanjose.service -f
+
+7 . rclone drive
+rclone config
+gdrive_tesis
+
+8. cámara video continuo
+rpicam-hello -t 0 --vflip --hflip
+
+9.

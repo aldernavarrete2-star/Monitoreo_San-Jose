@@ -1,0 +1,24 @@
+Para la captura de imagen, no utilicé bibliotecas genéricas ni cámaras USB, ya que introducen latencia. Utilicé la librería oficial Picamera2, la cual se comunica directamente con el puerto físico MIPI CSI-2 de la Raspberry Pi. En el código, configuré el formato directamente a RGB888 con una resolución óptima de 640x480.
+
+
+cv2 (OpenCV): Es el motor de procesamiento de imágenes. Lo usas para rotar la captura 180 grados, convertir espacios de color (BGR a RGB), aplicar recortes a la placa, hacer el zoom cúbico, mejorar el contraste con filtros (CLAHE), dibujar el rectángulo verde de detección y guardar el archivo final (.jpg).
+
+os: Interactúa con el sistema de archivos de Linux. Te permite crear automáticamente la estructura de carpetas por meses y días (os.makedirs) y construir las rutas exactas donde se guardan las evidencias (os.path.join).
+
+time: Maneja el reloj de ejecución del procesador. Permite realizar pausas estratégicas (time.sleep), como la espera de 10 minutos para Drive, el tiempo que el reflector debe mantenerse encendido, y la pausa de seguridad de 5 segundos tras una captura.
+
+requests: Se encarga de las peticiones de red salientes. Ejecuta llamadas HTTP tipo POST hacia la API REST de Telegram para inyectar la fotografía y el mensaje de alerta directamente en la aplicación móvil.
+
+easyocr: Es el motor de Reconocimiento Óptico de Caracteres. Recibe la imagen de la placa procesada (en escala de grises y alto contraste) y extrae las letras y números para convertirlos en texto digital.
+
+threading: Permite la concurrencia o multitarea. Lo utilizas para ejecutar la función de sincronización de Google Drive en un "hilo" paralelo, garantizando que el bucle principal de vigilancia nunca se congele mientras se suben archivos.
+
+subprocess: Ejecuta comandos de la terminal de Linux desde adentro del código Python. Lo usas exclusivamente para disparar la herramienta externa rclone que gestiona la subida a la nube.
+
+datetime: Extrae la fecha y hora exacta del sistema. Es vital para nombrar las fotografías cronológicamente (evitando que se sobreescriban), generar las rutas de las carpetas y estampar la hora de la intrusión en la bitácora .txt y en Telegram.
+
+ultralytics (YOLO): Es el motor del modelo de Inteligencia Artificial. Carga la red neuronal YOLOv8n, recibe la imagen capturada y devuelve las cajas delimitadoras (boxes) junto con las clasificaciones (persona, carro, camión).
+
+picamera2: Es la librería nativa de la Fundación Raspberry Pi. Gestiona la comunicación directa y sin latencia con el hardware de la cámara a través del bus físico MIPI CSI-2, capturando matrices de píxeles crudas.
+
+gpiozero (MotionSensor, OutputDevice): Controla las interfaces físicas de la placa. Traduce las instrucciones de software a señales eléctricas en los pines GPIO para leer los pulsos del sensor PIR y conmutar el relé que enciende el reflector.
